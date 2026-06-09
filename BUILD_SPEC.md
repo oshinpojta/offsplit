@@ -1,6 +1,8 @@
-# Bill-Splitter — Build Specification (handoff for Claude Code)
+# Offsplit — Build Specification (handoff for Claude Code)
 
-> Working codename: **Tally** (name is an open decision — see §16). A Splitwise alternative for India whose wedge is one-tap UPI settlement on a generous, no-paywall free tier.
+> **Offsplit** — *Split bills / expenses, settle on UPI.* Part of the Offcoder family (alongside Offsync). A Splitwise alternative for India whose wedge is one-tap UPI settlement on a generous, no-paywall free tier.
+>
+> **Naming/compliance note:** marketing **never** says "make payments" — Offsplit *settles up* by launching a UPI intent the user approves in their own app (§2.1). Use "settle up" / "settle on UPI," never "pay" or "make payments."
 
 ---
 
@@ -30,7 +32,7 @@ A mobile bill-splitting app. Users create groups, log shared expenses, see who o
 3. **Settlement confirmation is manual.** There is no payment callback. The app tracks settlement state via explicit user action (§8.2).
 4. **Thin backend, local-first client.** The client works fully offline against a local DB; the server handles sync, identity, and notifications only (§4, §10).
 5. **MUST freeze history on merge.** Merging identities never rewrites historical expense splits (§6.3). Identity resolution happens at read time.
-6. **Generous, no-paywall free tier.** Unlimited groups, expenses, and trips are free forever. This is the growth strategy. Monetization is ads-primary (§13).
+6. **Generous, no-paywall free tier.** Unlimited groups, expenses, and trips are free forever — this is the growth engine. Monetization is **recurring subscriptions (Plus / Manager) primary; ads are a late, optional, scale-only floor**, off at launch (§13).
 7. **No OCR, no SMS, no phone auth.** (Removed from scope — auth is Google sign-in; §12.)
 
 ---
@@ -45,10 +47,10 @@ A mobile bill-splitting app. Users create groups, log shared expenses, see who o
 | Backend | Cloudflare Workers | REST API; verifies Firebase ID tokens at the edge |
 | Ledger DB | Cloudflare D1 (SQLite) | Default. Use Durable-Objects-per-group only if concurrent group edits get heavy (§10.3) |
 | Push | Firebase Cloud Messaging (FCM) | Settlement nudges; free |
-| Ads | Google AdMob | Revenue engine (§13) |
-| Subscriptions | RevenueCat | Phase 3 only |
+| Ads | Google AdMob | Scale-only floor, **off at launch** (§13.3) |
+| Subscriptions | RevenueCat | **Primary revenue** (Plus / Manager); wired in Phase 2 (§13.5) |
 
-**Explicitly NOT in the stack:** R2 (no receipt images), any OCR/inference service, any SMS provider, any payment SDK.
+**Explicitly NOT in the stack (Phase 1):** R2 (no receipt images — re-evaluate for Phase 2, §17), any OCR/inference service, any SMS provider, any payment SDK.
 
 ---
 
@@ -221,11 +223,13 @@ You can add "Rahul" with just a name (and optionally his UPI ID) and split with 
 
 ### 6.2 Token-based claiming
 
-When a ghost is created, mint a `claim_token` and a shareable link (`https://<app>/claim/<token>`). Share via WhatsApp/anywhere. When the recipient opens it and signs in with Google:
+When a ghost is created, mint a `claim_token` and a shareable link (`https://offsplit.app/claim/<token>`). Share via WhatsApp/anywhere. When the recipient opens it and signs in with Google:
 - If they have **no** account → the ghost is upgraded in place (`google_sub` set, `is_ghost = 0`).
 - If they **already** have an account → run a **merge** (their existing account = A survivor, ghost = B folded in).
 
 The token is the proof of identity. **No phone/email matching.** Email match may be offered later as a convenience hint only, never as the authoritative path.
+
+**Token hygiene:** claim tokens are **single-use, short-TTL, and bound to the first authenticated open**; rate-limit ghost creation per user to prevent claim-link spam/abuse. Invalid / expired / already-claimed tokens fail closed (§15.1-T7). Tokens travel through WhatsApp link-preview crawlers and chat backups — keep them opaque and random, and never embed anything sensitive beyond the token itself.
 
 ### 6.3 The merge engine — one primitive, three entry points
 
@@ -258,6 +262,8 @@ Validation rule for all types: `SUM(expense_splits.share_amount) == expenses.amo
 
 ### 7.2 Balances
 Net balance per (effective) user in a group = `Σ(amounts they paid) − Σ(their split shares)` across non-deleted expenses, then apply confirmed settlements. Positive = owed to them; negative = they owe.
+
+**Performance (materialized balances):** do not recompute balances by scanning all `expense_splits` and following `merged_into` chains on every read — at scale that becomes the single largest D1 cost line. Keep a per-group `member_balances` cache (paise per effective user), updated incrementally on each mutation and recomputed on merge / reversal. This is **derived state and does NOT violate R2** (§6.4): the immutable split/settlement rows remain the source of truth, and the cache is rebuildable from them at any time.
 
 ### 7.3 Debt simplification (free, on by default)
 Minimize the number of transfers (Splitwise gates the nuance — we give it away).
@@ -297,6 +303,8 @@ pending ──(payer taps "I paid")──► marked_paid ──(payee confirms r
 - On `marked_paid`, push an FCM nudge to the payee: "Confirm you received ₹X?"
 - Set this expectation in onboarding so users aren't surprised that confirmation is manual. This is the same model Splitwise uses for most users — we're not worse, we just manage the expectation.
 
+**Nudge reachability limit:** FCM only reaches users who have installed the app. A debtor is often a ghost (no app), so the only nudge channel for them is the creator re-sharing the claim link (WhatsApp is the de-facto notification layer in India). This is an **accepted limitation** — do not add SMS / WhatsApp Business API (cost + the §2 no-SMS rule). Lean on the claim link doubling as the reminder.
+
 ---
 
 ## 9. Household / partner link (headline differentiator)
@@ -320,9 +328,12 @@ Two people stay **separate accounts** but settle as one unit. This is a **nettin
 - Expenses are mostly **append-only**, which sidesteps most conflicts.
 - For edits: **per-entity last-write-wins** using server `updated_at`/version.
 - Deletes are **soft** (tombstone via `deleted_at`) to prevent resurrection on a late sync from another device.
+- **For a money ledger, LWW can silently drop a legitimate edit.** Keep an **append-only mutation/edit log** (event-sourced) so a superseded edit stays recoverable and auditable — extend the append-mostly model from expenses to edits. LWW decides the *current* value; the log preserves *history* (and is the audit trail behind a "the app ate my correction" complaint).
 
 ### 10.3 D1 vs Durable Objects
 Default to **D1** for simplicity. If concurrent edits within a single group become messy (multiple people editing one trip live), promote hot groups to **one Durable Object per group** holding that group's ledger and fanning out push. Build the sync API so this swap is an implementation detail behind the same endpoints.
+
+**Decide the sharding seam now, even if unused until Phase 2+.** A single D1 has a ~10 GB ceiling and will not hold ~1M active users' ledgers. Either hash-shard by `group_id` across N D1 databases, or adopt the Durable-Object-per-group model above (which shards naturally *and* resolves live concurrent-edit conflicts). The cost is the same either way: **do not bake a single-DB assumption into `/sync` or the data-access layer** — route every query through a group-resolver so the physical store is swappable.
 
 ---
 
@@ -376,25 +387,47 @@ POST   /sync                    batched outbox apply + pull (idempotent)
 
 ---
 
-## 13. Monetization (ads-primary)
+## 13. Monetization (free-first; recurring subscriptions primary, ads a scale-only floor)
 
-- **Free tier is the product:** unlimited groups, expenses, trips, debt simplification, UPI settle, multi-currency. No caps. This is the anti-Splitwise wedge and the growth engine.
-- **AdMob** is the revenue engine: banner on list screens, interstitial **sparingly** (e.g. after a settle completes — never mid-add-expense), optional native ad in the activity feed. Indian eCPMs are low; do not over-monetize and harm retention.
-- **Pro (Phase 3, RevenueCat):** primarily **removes ads**, plus power-user conveniences (CSV/PDF export, spending insights, custom categories, themes). Expect **0.5–1%** conversion — ads carry revenue, Pro is secondary. There is no OCR; do not gate core functionality behind Pro.
+**Rationale.** The architecture is near-free to run — a few ₹hundred/month at 10k users, ~₹8–17k/month even at 1M MAU; **infra is never the constraint.** The binding constraint is that Indian ad ARPU is only **~₹1–2 per MAU/month**, which makes ads a weak *primary* engine for a low-frequency utility app. So revenue comes from **value people pay for** (recurring subscriptions), and ads are demoted to a late, optional, scale-only floor. Operational break-even for a lean team lands around **~200k MAU** at mid ad-ARPU, so getting there cheaply via the viral claim loop matters more than squeezing early revenue.
+
+### 13.1 Free tier is the product (the growth wedge)
+Unlimited groups, expenses, trips, debt simplification, UPI settle, multi-currency. **No caps, ever.** This is the anti-Splitwise wedge and the growth engine. **k-factor (claims per active user) is the #1 growth metric** — the viral ghost→claim loop is the only economically viable acquisition channel (paid installs at India CAC never repay ad ARPU). Never let monetization tax the sharing/retention behaviors that drive virality.
+
+### 13.2 Tiers
+- **Plus — ₹99/year (recurring annual; 7-day free trial).** Ad-free + themes + CSV/PDF export + spending insights. Bill **annually, not monthly** — a bill-splitter isn't a monthly-conscious app, and annual billing is ¼ the renewal-failure surface with far less churn/dunning. At ~5× ad-LTV, every subscriber is strongly accretive.
+- **Manager — ₹499–999/year (recurring annual).** SMB / power tier for people managing *other people's* money flows: PG/hostel owners, frequent trip organizers, event hosts, flat managers. Multi-group dashboards, member management, bulk reminders, advanced exports. This is where **durable recurring revenue** lives — far lower price sensitivity than consumers; consumer Plus alone is thin at India prices.
+- **Plus Lifetime — ₹399 one-time (unpromoted).** Catches the subscription-averse; priced at ~4 years of Plus so it doesn't cannibalize the annual. Offer it, don't push it.
+
+Expect **0.5–1%** consumer conversion — but per-converter leverage is huge (one ₹99/yr sub ≈ ~5 MAU-years of ad revenue), so push Plus harder than a typical "secondary" tier.
+
+### 13.3 Ads (scale-only floor — OFF at launch)
+**No ads at launch.** Ads (and therefore the value of "ad-free") only switch on once the product has proven retention + virality at scale, behind a **pre-committed trigger metric** — e.g. introduce ads only after **~200k MAU AND 30-day cohort retention ≥ target AND k-factor stable.** When on: a single unobtrusive native unit and/or **opt-in rewarded** ads — **never interstitials that interrupt a flow** — behind remote config so density can be dialed down if retention dips. Fairness framing for the ad-free upsell: *"You've contributed ~₹X through ads — go ad-free for ₹99/year."*
+
+### 13.4 What we never do
+No OCR. **No gating of core functionality** behind a paid tier (the free tier is the wedge). No lending/credit, no data monetization, no becoming a payment router — all incinerate trust in a money-adjacent app and reintroduce the regulatory risk we deliberately designed out (§2, §16).
+
+### 13.5 Engineering implications
+- Subscriptions / entitlements via **RevenueCat** (free under $2,500 MTR; 1% above) — **wired in Phase 2, not Phase 3**, since subs are now primary.
+- Build **dunning** (grace period + retry + reminder push). Indian card / UPI-mandate renewals fail often; recovery is real recurring money, not an edge case.
+- Google Play takes **15%** on subscriptions (first $1M/yr) — model net revenue accordingly.
+- Ship the **ad-free entitlement** with Plus from Phase 2 even though ads are off — turning ads on later then becomes a config flip, not a release.
 
 ---
 
 ## 14. Phasing & milestones
 
 ### Phase 1 — MVP (shippable wedge)
-Auth (Google), groups, **ghost members + token claim**, add expense (equal + exact split), balances, **debt simplification**, **UPI one-tap settle**, settlement state machine (mark-paid / confirm / dispute), **merge engine** (required by claim flow), offline-first sync. Free + AdMob.
+Auth (Google), groups, **ghost members + token claim**, add expense (equal + exact split), balances, **debt simplification**, **UPI one-tap settle**, settlement state machine (mark-paid / confirm / dispute), **merge engine** (required by claim flow), offline-first sync. **Free, ad-free, no subscriptions** — pure growth.
+**Launches ad-free; no paywall, no subscriptions** (monetization arrives in Phase 2). The only metric that matters here is **k-factor / retention** (§13.1).
 **Acceptance:** a user can create a group, add a ghost, log expenses offline, see simplified balances, generate a working `upi://` link that opens GPay/PhonePe pre-filled, and the ghost can claim via link and merge with all history intact and all third-party balances unchanged.
 
-### Phase 2 — differentiation
+### Phase 2 — differentiation + recurring revenue
 Trip mode (multi-day, categories, multi-currency given away free), **household/partner link** (headline feature), recurring splits (rent/flatmate), percent & shares split types, iOS + Apple Sign-In.
+**Monetization goes live (subscriptions are primary):** RevenueCat + **Plus (₹99/yr)** — themes, CSV/PDF export, spending insights, and the ad-free entitlement (moot until ads exist, but shipped) — and **Manager (₹499–999/yr)** SMB tier. 7-day free trial + dunning (§13.2, §13.5). Gate monetization on Phase-1 retention/k-factor being healthy.
 
-### Phase 3 — monetization polish
-RevenueCat, remove-ads Pro tier, CSV/PDF export, spending insights/charts, themes.
+### Phase 3 — scale monetization & polish
+Turn on the **scale-only ad floor** behind the §13.3 trigger metric (minimal native / opt-in rewarded only), the ad-free fairness upsell, **Manager advanced dashboards + bulk reminders**, additional Plus perks (custom categories, charts), and density tuning against retention.
 
 ---
 
@@ -436,8 +469,10 @@ Every legal transition and every illegal transition (e.g. confirm before marked_
 
 ## 17. Open decisions for the human
 
-- **Name & branding** (codename "Tally" is a placeholder; could fold under an existing brand system).
+- **Name:** decided — **Offsplit** (tagline "Split bills / expenses, settle on UPI"), in the Offcoder / Offsync family. **Domain: `offsplit.app`** (chosen; `.com` is parked/taken, `.in` available as backup). Play Store + App Store names are both free (verified — no existing "Offsplit" app). Remaining before launch: (a) manual trademark search in USPTO TESS + IP India, Nice classes **9 / 36 / 42**; (b) grab `@offsplit` social handles; (c) logo / visual identity.
 - **Multi-currency:** confirmed free, but verify the FX rate source.
-- **D1 vs Durable Objects** promotion threshold (§10.3) — start D1, measure.
+- **Sharding seam** (§10.3) — start single D1 and measure, but the group-resolver indirection that keeps the store swappable is **not** optional; decide hash-shard-vs-DO before the ~10 GB ceiling is in sight.
 - **iOS timing** and Apple Sign-In.
-- **Ad placement density** — tune against retention after launch.
+- **Ad introduction trigger + density** (§13.3) — ads are scale-only; finalize the exact MAU / retention / k-factor thresholds and tune density against retention.
+- **Plus / Manager pricing** (₹99 / ₹499–999) — validate against measured willingness-to-pay post-launch; confirm the 7-day-trial + annual-only stance.
+- **Receipt image attachments (R2)** — re-evaluate for Phase 2 (a top-requested feature, currently out of Phase 1 scope, §3/§16).
