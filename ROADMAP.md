@@ -8,7 +8,7 @@
 
 ## Status snapshot
 
-> **As of `2026-06-10`** — **Sprint 1 (merge engine + money math) CODE-COMPLETE, test-first as specified.** Golden vector suite (`engine-vectors/`, 68 cases pinning M8 rounding, M10 settlement timing, M11 simplification, merge matrix T1–T10, settlement state machine) runs against BOTH engines: TS (`workers/packages/engine`, vitest) and Dart (`app/lib/engine`, flutter_test) — 70/70 green each, plus 2×1000 seeded property cases (identical LCG/seeds cross-language). Engine bonus: percent/shares split types already implemented (Sprint 11 only exposes them in the API/UI). Sprint 0 code rails done (pnpm workers monorepo, Flutter scaffold `offsplit` @ app.offsplit, `offsplit-ci.yml`); Sprint 0 ⚙️ ops items (Cloudflare/Firebase/Sentry/PostHog accounts, domain registration) still pending. Next: Sprint 2 (drift ledger) — or the ⚙️ account setup, which only the human can do.
+> **As of `2026-06-10` (v2)** — **Sprints 1 AND 2 complete.** Sprint 2: offline drift ledger shipped — §5.1 schema, `LedgerRepository` (transactional mutations + incremental `member_balances` cache, S4 whole-doc edits, S5 guarded settlements with M10 cache effects, M4 read-time identity resolution, D5 rebuild + D6 mini-audit), 6-scenario airplane-mode gate suite. **76/76 tests green** (70 engine + 6 ledger), analyzer clean, pushed to `oshinpojta/offsplit@main`. Earlier same day — Sprint 1 (merge engine + money math), test-first as specified: Golden vector suite (`engine-vectors/`, 68 cases pinning M8 rounding, M10 settlement timing, M11 simplification, merge matrix T1–T10, settlement state machine) runs against BOTH engines: TS (`workers/packages/engine`, vitest) and Dart (`app/lib/engine`, flutter_test) — 70/70 green each, plus 2×1000 seeded property cases (identical LCG/seeds cross-language). Engine bonus: percent/shares split types already implemented (Sprint 11 only exposes them in the API/UI). Sprint 0 code rails done (pnpm workers monorepo, Flutter scaffold `offsplit` @ app.offsplit, `offsplit-ci.yml`); Sprint 0 ⚙️ ops items (Cloudflare/Firebase/Sentry/PostHog accounts, domain registration) still pending. Next: Sprint 2 (drift ledger) — or the ⚙️ account setup, which only the human can do.
 
 | Layer | Status |
 |---|---|
@@ -104,13 +104,14 @@ The single riskiest module (BUILD_SPEC §0, §6). Built exactly as specified: **
 - [x] 🔧 Bounds (₹100cr amount cap, 50-participant cap — D2) + seeded property tests, 1000 cases × 2 suites, **identical LCG + seeds in TS and Dart** (D8)
 - **Gate MET:** 70/70 green in TS (vitest) and 70/70 in Dart (flutter_test) on the same vector files; analyzers clean; CI enforces both on every PR.
 
-### Sprint 2 — Local drift ledger (offline-first core) _(~6 dev-days)_ 📋
+### Sprint 2 — Local drift ledger (offline-first core) _(~6 dev-days)_ ✅ `2026-06-10`
 
-- [ ] 🔧 drift schema mirroring BUILD_SPEC §5.1 synced subset; client-side UUIDs; integer paise
-- [ ] 🔧 CRUD — groups, members, **ghosts**, expenses (equal + exact) + splits; soft-delete tombstones
-- [ ] 🔧 Balance views — raw "who you spent with" + simplified "who to pay" (both, always — §7.3 explainability)
-- [ ] 🔧 Materialized per-group `member_balances` cache, incremental update on mutation (§7.2)
-- **Gate:** full add-group → ghost → expenses → balances flow in airplane mode
+- [x] 🔧 drift schema (`app/lib/data/db.dart`) mirroring BUILD_SPEC §5.1 synced subset; client UUIDs; integer paise; CHECK constraints (D2/L3)
+- [x] 🔧 `LedgerRepository` CRUD — groups, members, **ghosts**, expenses + splits (all four split types via engine), **whole-document edits (S4)**, idempotent soft-delete tombstones; every mutation + its cache update in ONE transaction (L2)
+- [x] 🔧 Settlement lifecycle — guarded transitions (S5) with M10 cache effects (apply on marked_paid, revert on disputed)
+- [x] 🔧 Balance views — raw pairwise "who you spent with" + simplified "who to pay" (§7.3), identity resolved at read time (M4)
+- [x] 🔧 Materialized `member_balances` cache — stores RAW user ids so **merges never touch it** (effective view = aggregation at read); `rebuildBalanceCache` (D5) + `auditBalanceCache` mini-audit with conservation check (D6)
+- **Gate MET:** full group → ghosts → expenses → balances flow on in-memory DB with zero network; 6-scenario suite incl. merge-agnostic-cache proof; 76/76 total green, analyzer clean.
 
 ### Sprint 3 — UPI settle + settlement state machine _(~4 dev-days)_ 📋
 
