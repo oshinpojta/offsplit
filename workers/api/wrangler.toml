@@ -1,0 +1,20 @@
+# Offsplit API — Cloudflare Workers + D1.
+# Deploys are an ops step (Cloudflare account pending): create the D1
+# databases, paste their ids below, then `pnpm deploy:staging` / `deploy:prod`.
+name = "offsplit-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+[env.staging]
+name = "offsplit-api-staging"
+vars = { FIREBASE_PROJECT_ID = "offsplit-staging" }
+d1_databases = [
+  { binding = "DB", database_name = "offsplit-staging", database_id = "TODO-create-and-paste" },
+]
+
+[env.production]
+name = "offsplit-api-prod"
+vars = { FIREBASE_PROJECT_ID = "offsplit-prod" }
+d1_databases = [
+  { binding = "DB", database_name = "offsplit-prod", database_id = "TODO-create-and-paste" },
+]
