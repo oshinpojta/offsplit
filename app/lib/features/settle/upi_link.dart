@@ -8,7 +8,7 @@ const int _maxAmountPaise = 1000000000000; // mirrors engine D2 bound
 const int _maxNoteLength = 80; // PSP apps truncate long notes; keep ours short
 
 /// Permissive VPA shape: handle@psp. Mirrored in workers/api (vpa.ts).
-final RegExp vpaPattern = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{1,255}@[a-zA-Z]{2,64}$');
+final RegExp vpaPattern = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}@[a-zA-Z]{2,64}$');
 
 class UpiError implements Exception {
   const UpiError(this.code, [this.detail]);
