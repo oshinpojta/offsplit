@@ -8,7 +8,7 @@
 
 ## Status snapshot
 
-> **As of `2026-06-10` (v2)** — **Sprints 1 AND 2 complete.** Sprint 2: offline drift ledger shipped — §5.1 schema, `LedgerRepository` (transactional mutations + incremental `member_balances` cache, S4 whole-doc edits, S5 guarded settlements with M10 cache effects, M4 read-time identity resolution, D5 rebuild + D6 mini-audit), 6-scenario airplane-mode gate suite. **76/76 tests green** (70 engine + 6 ledger), analyzer clean, pushed to `oshinpojta/offsplit@main`. Earlier same day — Sprint 1 (merge engine + money math), test-first as specified: Golden vector suite (`engine-vectors/`, 68 cases pinning M8 rounding, M10 settlement timing, M11 simplification, merge matrix T1–T10, settlement state machine) runs against BOTH engines: TS (`workers/packages/engine`, vitest) and Dart (`app/lib/engine`, flutter_test) — 70/70 green each, plus 2×1000 seeded property cases (identical LCG/seeds cross-language). Engine bonus: percent/shares split types already implemented (Sprint 11 only exposes them in the API/UI). Sprint 0 code rails done (pnpm workers monorepo, Flutter scaffold `offsplit` @ app.offsplit, `offsplit-ci.yml`); Sprint 0 ⚙️ ops items (Cloudflare/Firebase/Sentry/PostHog accounts, domain registration) still pending. Next: Sprint 2 (drift ledger) — or the ⚙️ account setup, which only the human can do.
+> **As of `2026-06-10` (v3)** — **Sprints 1–5 code-complete in one day.** Sprint 3: UPI builder + SettleService (85/85 app tests; hardware check ⚙️). Sprint 4: Workers auth — Firebase JWKS verify at edge, /auth/session, /me (client SDK wiring ⏸ on the Firebase project). Sprint 5: full §11 REST API over D1 — CAS merge/claim (single-statement, batch-atomic), token hardening (T7 no-oracle), role-gated settlements, balances via the shared engine; **22 route tests + 70 engine + 85 app = 177 tests green**, typecheck/analyzer clean. Deploys ⏸ on the ⚙️ Cloudflare account. Next code: Sprint 6 (offline sync) — the last ⚠️ high-risk module. Earlier same day, v2: Sprints 1 AND 2 complete. Sprint 2: offline drift ledger shipped — §5.1 schema, `LedgerRepository` (transactional mutations + incremental `member_balances` cache, S4 whole-doc edits, S5 guarded settlements with M10 cache effects, M4 read-time identity resolution, D5 rebuild + D6 mini-audit), 6-scenario airplane-mode gate suite. **76/76 tests green** (70 engine + 6 ledger), analyzer clean, pushed to `oshinpojta/offsplit@main`. Earlier same day — Sprint 1 (merge engine + money math), test-first as specified: Golden vector suite (`engine-vectors/`, 68 cases pinning M8 rounding, M10 settlement timing, M11 simplification, merge matrix T1–T10, settlement state machine) runs against BOTH engines: TS (`workers/packages/engine`, vitest) and Dart (`app/lib/engine`, flutter_test) — 70/70 green each, plus 2×1000 seeded property cases (identical LCG/seeds cross-language). Engine bonus: percent/shares split types already implemented (Sprint 11 only exposes them in the API/UI). Sprint 0 code rails done (pnpm workers monorepo, Flutter scaffold `offsplit` @ app.offsplit, `offsplit-ci.yml`); Sprint 0 ⚙️ ops items (Cloudflare/Firebase/Sentry/PostHog accounts, domain registration) still pending. Next: Sprint 2 (drift ledger) — or the ⚙️ account setup, which only the human can do.
 
 | Layer | Status |
 |---|---|
@@ -113,29 +113,30 @@ The single riskiest module (BUILD_SPEC §0, §6). Built exactly as specified: **
 - [x] 🔧 Materialized `member_balances` cache — stores RAW user ids so **merges never touch it** (effective view = aggregation at read); `rebuildBalanceCache` (D5) + `auditBalanceCache` mini-audit with conservation check (D6)
 - **Gate MET:** full group → ghosts → expenses → balances flow on in-memory DB with zero network; 6-scenario suite incl. merge-agnostic-cache proof; 76/76 total green, analyzer clean.
 
-### Sprint 3 — UPI settle + settlement state machine _(~4 dev-days)_ 📋
+### Sprint 3 — UPI settle + settlement state machine _(~4 dev-days)_ ✅ code `2026-06-10` (⚙️ device check pending)
 
-- [ ] 🔧 UPI intent builder — `upi://pay?pa=&pn=&am=&cu=INR&tn=` (rupees-2dp from paise; generic intent → OS app-chooser; no Amazon Pay promise)
-- [ ] 🔧 Settlement state machine + tests (§15.2): pending → marked_paid → confirmed; dispute → pending; illegal transitions reject
-- [ ] 🔧 Prompt-payee-for-VPA flow when `default_upi_id` missing
-- [ ] ⚙️ Real-device verification: GPay + PhonePe + Paytm open pre-filled
-- **Gate:** every legal + illegal transition tested; link works on 3 PSP apps on hardware
+- [x] 🔧 UPI intent builder (`app/lib/features/settle/upi_link.dart`) — `upi://pay?pa=&pn=&am=&cu=INR&tn=`; integer-only paise→rupees (the single conversion point); VPA shape validation; 80-char note clip
+- [x] 🔧 Settlement state machine + tests — done in Sprint 1 engine (§15.2 vectors) + Sprint 2 repository wiring
+- [x] 🔧 `SettleService` — settlement→link wiring, persisted `upi_link`, `missing_vpa` typed error drives the prompt-payee flow, `setUserVpa`
+- [ ] ⚙️ Real-device verification: GPay + PhonePe + Paytm open pre-filled (needs human + handset)
+- **Gate:** code half MET (85/85 app tests); hardware half awaits ⚙️
 
-### Sprint 4 — Auth (Firebase Google Sign-In) _(~4 dev-days)_ 📋
+### Sprint 4 — Auth (Firebase Google Sign-In) _(~4 dev-days)_ ✅ server half `2026-06-10` (client SDK wiring ⏸ on Firebase project)
 
-- [ ] 🔧 Flutter: one-tap Google Sign-In, Firebase ID token, persistent session (never force re-auth)
-- [ ] 🔧 Workers: verify ID token against Firebase JWKS at edge (cache keys; check `aud`/`iss`/`exp`)
-- [ ] 🔧 `POST /auth/session` upsert by `google_sub` · `GET/PATCH /me` (display_name, default_upi_id)
-- [ ] 🔧 Dio auth interceptor adapted from house pattern
+- [x] 🔧 Workers: Firebase ID-token verification at edge (`jose`, Google securetoken JWK set, per-isolate cache, `AUTH_JWKS_JSON` test/pinning override; `iss`/`aud`/`exp`/RS256 enforced)
+- [x] 🔧 `POST /auth/session` upsert by `google_sub` (sign-in resolves tombstoned accounts to survivor — M6) · `GET/PATCH /me` with VPA validation
+- [x] 🔧 Auth tests through the production verify path: self-signed RS256 JWTs — valid / garbage / wrong-aud / **expired** / session-required
+- [ ] ⏸ Flutter: firebase_auth + google_sign_in SDK wiring + Dio interceptor — **blocked on ⚙️ Firebase project** (google-services.json); server contract is ready and tested
 
-### Sprint 5 — Workers API + D1 _(~7 dev-days)_ 📋
+### Sprint 5 — Workers API + D1 _(~7 dev-days)_ ✅ `2026-06-10` (deploy ⏸ on Cloudflare account)
 
-- [ ] 🔧 D1 DDL migrations (§5.1 full schema incl. `applied_mutations`, `claim_tokens`, `merge_records`)
-- [ ] 🔧 REST surface (§11): groups, members, ghosts, expenses, balances, settlements (+ mark-paid/confirm/dispute)
-- [ ] 🔧 **Group-resolver indirection** — every query routes through it; physical store swappable later (D1-shard or DO-per-group, §10.3). No single-DB assumption in `/sync`
-- [ ] 🔧 Rate limiting (ghost/claim creation per user — token-spam guard §6.2), CORS, error envelope
-- [ ] 🔧 Merge/claim writes as CAS-in-transaction (DESIGN D1), schema CHECK constraints (D2), token hardening — GET-never-mutates, generic errors, audit log (D3)
-- [ ] 🔧 Workers tests for routes against the Sprint-1 engine package
+- [x] 🔧 D1 DDL migration (§5.1 full schema incl. `applied_mutations`, `claim_tokens`, `merge_records`, `household_links`, `rate_limits`; CHECKs = L3)
+- [x] 🔧 REST surface (§11): groups (owner-only PATCH), members (balance-guarded removal), ghosts (+claim link, 7d TTL), expenses (S4 whole-doc PATCH, soft DELETE), balances (shared engine, per currency), settlements (server-side `upi_link`, role-gated transitions + stale-transition CAS), claim, merge + reverse
+- [x] 🔧 **Group-resolver seam** (`dbForGroup`) + `D1Like` structural interface — physical store swappable (§10.3); tests run the same store on a node:sqlite shim
+- [x] 🔧 Rate limiting (D1-window counters: ghosts 50/day, claims 20/h per user), zod validation, JSON error envelope
+- [x] 🔧 Merge = **single-statement CAS** guarding both preconditions + audit INSERT gated on the CAS (atomic `batch` — adapted D1 pattern since D1 has no interactive transactions); claim = single-winner CAS; reversal pair similarly guarded; **T7 fail-closed with generic `claim_invalid` (no oracle)**; GET /claim/:token never mutates
+- [x] 🔧 22 route tests against the Sprint-1 engine: authz lockouts, engine math E2E, T1 invariance over HTTP, T3 exact reversal, R6 noop, M10/S5 effects, terminal-confirmed 409s, Phase-1 merge restrictions
+- [ ] ⏸ ⚙️ `wrangler deploy` staging/prod + real-D1 migration run — blocked on Cloudflare account (wrangler.toml ready with TODO database ids)
 
 ### Sprint 6 — Offline sync ⚠️ _(~8 dev-days)_ 📋
 
