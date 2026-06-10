@@ -1,0 +1,234 @@
+{
+  "suite": "merge/merge-matrix",
+  "description": "Merge engine test matrix (§15.1 T1–T7 + DESIGN T8–T10). A merge mutates ONLY the merged user's row (A0/M2); identity resolves at read time (M4); resolution-first idempotency (M3). Net maps are keyed by effective user id — tombstoned ids must never appear. 'steps' apply in order; 'reverse' restores the merged user (M-series reversal).",
+  "cases": [
+    {
+      "name": "T1 third-party invariance: C's net is identical before and after B→A",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [{ "op": "merge", "primary": "A", "merged": "B" }],
+      "expect": {
+        "netBefore": { "A": -100, "B": -100, "C": 200 },
+        "net": { "A": -200, "C": 200 },
+        "transfers": [{ "from": "A", "to": "C", "amount": 200 }],
+        "pairwise": [{ "from": "A", "to": "C", "amount": 200 }],
+        "users": { "B": { "status": "merged", "merged_into": "A" } }
+      }
+    },
+    {
+      "name": "T2 A|B co-split: nets to zero for self, no self-debt surfaced (R7)",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e2",
+          "paid_by": "A",
+          "amount_total": 200,
+          "splits": { "A": 100, "B": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [{ "op": "merge", "primary": "A", "merged": "B" }],
+      "expect": {
+        "netBefore": { "A": 100, "B": -100 },
+        "net": { "A": 0 },
+        "transfers": [],
+        "pairwise": []
+      }
+    },
+    {
+      "name": "T3 reversibility: balances return exactly to pre-merge state",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [
+        { "op": "merge", "primary": "A", "merged": "B" },
+        { "op": "reverse", "merged": "B" }
+      ],
+      "expect": {
+        "net": { "A": -100, "B": -100, "C": 200 },
+        "users": { "B": { "status": "active", "merged_into": null } }
+      }
+    },
+    {
+      "name": "T4 idempotency: merging B→A twice is a no-op",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [
+        { "op": "merge", "primary": "A", "merged": "B" },
+        { "op": "merge", "primary": "A", "merged": "B", "expect_noop": true }
+      ],
+      "expect": {
+        "net": { "A": -200, "C": 200 }
+      }
+    },
+    {
+      "name": "T5a chain follow: merging into a tombstoned user resolves to the live survivor",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [
+        { "op": "merge", "primary": "A", "merged": "B" },
+        { "op": "merge", "primary": "B", "merged": "C" }
+      ],
+      "expect": {
+        "net": { "A": 0 },
+        "users": {
+          "B": { "status": "merged", "merged_into": "A" },
+          "C": { "status": "merged", "merged_into": "A" }
+        }
+      }
+    },
+    {
+      "name": "T5b self-merge after resolution is a no-op, never a cycle",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }],
+      "expenses": [],
+      "settlements": [],
+      "steps": [
+        { "op": "merge", "primary": "A", "merged": "B" },
+        { "op": "merge", "primary": "B", "merged": "A", "expect_noop": true }
+      ],
+      "expect": {
+        "net": {},
+        "users": {
+          "A": { "status": "active", "merged_into": null },
+          "B": { "status": "merged", "merged_into": "A" }
+        }
+      }
+    },
+    {
+      "name": "T6 settlement re-point: settlements referencing B resolve to A at read time",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "B", "to": "C", "amount": 50, "status": "confirmed" }
+      ],
+      "steps": [{ "op": "merge", "primary": "A", "merged": "B" }],
+      "expect": {
+        "netBefore": { "A": -100, "B": -50, "C": 150 },
+        "net": { "A": -150, "C": 150 },
+        "transfers": [{ "from": "A", "to": "C", "amount": 150 }]
+      }
+    },
+    {
+      "name": "T9a offline-window write: expense referencing tombstoned B resolves to A",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [
+        { "op": "merge", "primary": "A", "merged": "B" },
+        {
+          "op": "add_expense",
+          "expense": {
+            "id": "e3",
+            "paid_by": "C",
+            "amount_total": 90,
+            "splits": { "A": 30, "B": 30, "C": 30 }
+          }
+        }
+      ],
+      "expect": {
+        "net": { "A": -260, "C": 260 }
+      }
+    },
+    {
+      "name": "T9b offline-window write after reversal: the same row resolves back to B",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }, { "id": "C" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "C",
+          "amount_total": 300,
+          "splits": { "A": 100, "B": 100, "C": 100 }
+        }
+      ],
+      "settlements": [],
+      "steps": [
+        { "op": "merge", "primary": "A", "merged": "B" },
+        {
+          "op": "add_expense",
+          "expense": {
+            "id": "e3",
+            "paid_by": "C",
+            "amount_total": 90,
+            "splits": { "A": 30, "B": 30, "C": 30 }
+          }
+        },
+        { "op": "reverse", "merged": "B" }
+      ],
+      "expect": {
+        "net": { "A": -130, "B": -130, "C": 260 }
+      }
+    },
+    {
+      "name": "error: merge with unknown user fails closed",
+      "kind": "scenario",
+      "users": [{ "id": "A" }],
+      "expenses": [],
+      "settlements": [],
+      "steps": [{ "op": "merge", "primary": "A", "merged": "Z" }],
+      "expect": { "error": "unknown_user" }
+    },
+    {
+      "name": "error: reversing a user that is not merged fails closed",
+      "kind": "scenario",
+      "users": [{ "id": "A" }, { "id": "B", "ghost": true }],
+      "expenses": [],
+      "settlements": [],
+      "steps": [{ "op": "reverse", "merged": "B" }],
+      "expect": { "error": "not_merged" }
+    }
+  ]
+}

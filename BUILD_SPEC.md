@@ -9,6 +9,7 @@
 ## 0. How to use this document
 
 - **Build phase by phase (§14). Do not attempt the whole app in one pass.** Phase 1 is a shippable product on its own.
+- **Ambiguities in the merge engine, money math, and offline sync are resolved in [`ENGINE_AND_SYNC_DESIGN.md`](./ENGINE_AND_SYNC_DESIGN.md)** (decisions M1–M11, S1–S10, X1–X2). Build to those decisions; where that doc refines a literal reading of this spec (settlement balance timing, expense-as-document edits, settlements-not-LWW), the design doc wins.
 - **The merge engine (§6) is the single riskiest module in the codebase.** It is the one place where a bug silently corrupts other people's money records. Build it **test-first**: implement the test matrix in §15.1 before the engine itself.
 - Treat every rule written as **MUST** in §2 and §6 as a hard invariant, not a preference.
 - This app **never processes payments**. If you ever find yourself writing code that holds, routes, or confirms a payment via an API, stop — that is out of scope and out of compliance (§16).

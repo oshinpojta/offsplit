@@ -1,0 +1,79 @@
+{
+  "suite": "simplification",
+  "description": "Greedy min-cash-flow (M11): repeatedly match largest creditor with largest debtor; ties broken by user_id ascending; deterministic; <= n-1 transfers; transfers settle the nets exactly. The raw pairwise view is computed alongside to make the indirection explainable (§7.3).",
+  "cases": [
+    {
+      "name": "S1 chain collapses to one transfer (the indirection case)",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        { "id": "e1", "paid_by": "b", "amount_total": 100, "splits": { "a": 100 } },
+        { "id": "e2", "paid_by": "c", "amount_total": 100, "splits": { "b": 100 } }
+      ],
+      "settlements": [],
+      "expect": {
+        "net": { "a": -100, "b": 0, "c": 100 },
+        "transfers": [{ "from": "a", "to": "c", "amount": 100 }],
+        "pairwise": [
+          { "from": "a", "to": "b", "amount": 100 },
+          { "from": "b", "to": "c", "amount": 100 }
+        ]
+      }
+    },
+    {
+      "name": "S2 four users, three transfers (n-1 bound is tight)",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }, { "id": "d" }],
+      "expenses": [
+        { "id": "e1", "paid_by": "a", "amount_total": 500, "splits": { "c": 500 } },
+        {
+          "id": "e2",
+          "paid_by": "b",
+          "amount_total": 500,
+          "splits": { "d": 400, "c": 100 }
+        }
+      ],
+      "settlements": [],
+      "expect": {
+        "net": { "a": 500, "b": 500, "c": -600, "d": -400 },
+        "transfers": [
+          { "from": "c", "to": "a", "amount": 500 },
+          { "from": "d", "to": "b", "amount": 400 },
+          { "from": "c", "to": "b", "amount": 100 }
+        ]
+      }
+    },
+    {
+      "name": "S3 creditor tie broken by user_id asc — output never flickers",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        { "id": "e1", "paid_by": "a", "amount_total": 100, "splits": { "c": 100 } },
+        { "id": "e2", "paid_by": "b", "amount_total": 100, "splits": { "c": 100 } }
+      ],
+      "settlements": [],
+      "expect": {
+        "net": { "a": 100, "b": 100, "c": -200 },
+        "transfers": [
+          { "from": "c", "to": "a", "amount": 100 },
+          { "from": "c", "to": "b", "amount": 100 }
+        ]
+      }
+    },
+    {
+      "name": "S4 all settled — no transfers",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }],
+      "expenses": [
+        { "id": "e1", "paid_by": "a", "amount_total": 100, "splits": { "b": 100 } }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "b", "to": "a", "amount": 100, "status": "confirmed" }
+      ],
+      "expect": {
+        "net": { "a": 0, "b": 0 },
+        "transfers": []
+      }
+    }
+  ]
+}

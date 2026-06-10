@@ -1,0 +1,23 @@
+{
+  "name": "@offsplit/engine",
+  "version": "0.0.1",
+  "description": "Offsplit ledger engine — money math, balances, debt simplification, settlement state machine, merge planning. Pure functions; no I/O. Mirrored in Dart (app/lib/engine); both run the golden vectors in ../../engine-vectors.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

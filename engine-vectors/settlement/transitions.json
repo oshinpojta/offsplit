@@ -1,0 +1,28 @@
+{
+  "suite": "settlement/transitions",
+  "description": "Settlement state machine (§8.2, §15.2, S5): pending →(mark_paid)→ marked_paid →(confirm)→ confirmed; marked_paid →(dispute)→ disputed →(reset)→ pending. confirmed is terminal. Every illegal transition is rejected — settlement status is never LWW. balance_effect cases pin M10: applied at marked_paid and confirmed only.",
+  "cases": [
+    { "name": "legal: pending + mark_paid", "kind": "transition", "from": "pending", "action": "mark_paid", "expect": { "status": "marked_paid" } },
+    { "name": "legal: marked_paid + confirm", "kind": "transition", "from": "marked_paid", "action": "confirm", "expect": { "status": "confirmed" } },
+    { "name": "legal: marked_paid + dispute", "kind": "transition", "from": "marked_paid", "action": "dispute", "expect": { "status": "disputed" } },
+    { "name": "legal: disputed + reset returns to pending", "kind": "transition", "from": "disputed", "action": "reset", "expect": { "status": "pending" } },
+
+    { "name": "illegal: pending + confirm (confirm before marked_paid must reject)", "kind": "transition", "from": "pending", "action": "confirm", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: pending + dispute", "kind": "transition", "from": "pending", "action": "dispute", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: pending + reset", "kind": "transition", "from": "pending", "action": "reset", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: marked_paid + mark_paid (double mark)", "kind": "transition", "from": "marked_paid", "action": "mark_paid", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: marked_paid + reset", "kind": "transition", "from": "marked_paid", "action": "reset", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: confirmed is terminal — mark_paid", "kind": "transition", "from": "confirmed", "action": "mark_paid", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: confirmed is terminal — confirm", "kind": "transition", "from": "confirmed", "action": "confirm", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: confirmed is terminal — dispute (stale offline dispute cannot regress, S5)", "kind": "transition", "from": "confirmed", "action": "dispute", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: confirmed is terminal — reset", "kind": "transition", "from": "confirmed", "action": "reset", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: disputed + mark_paid (must reset to pending first)", "kind": "transition", "from": "disputed", "action": "mark_paid", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: disputed + confirm", "kind": "transition", "from": "disputed", "action": "confirm", "expect": { "error": "illegal_transition" } },
+    { "name": "illegal: disputed + dispute", "kind": "transition", "from": "disputed", "action": "dispute", "expect": { "error": "illegal_transition" } },
+
+    { "name": "balance effect: pending not applied (M10)", "kind": "balance_effect", "status": "pending", "expect": { "applied": false } },
+    { "name": "balance effect: marked_paid applied (M10)", "kind": "balance_effect", "status": "marked_paid", "expect": { "applied": true } },
+    { "name": "balance effect: confirmed applied (M10)", "kind": "balance_effect", "status": "confirmed", "expect": { "applied": true } },
+    { "name": "balance effect: disputed not applied (M10)", "kind": "balance_effect", "status": "disputed", "expect": { "applied": false } }
+  ]
+}

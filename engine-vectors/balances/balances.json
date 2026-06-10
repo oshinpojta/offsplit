@@ -1,0 +1,164 @@
+{
+  "suite": "balances",
+  "description": "Net balance computation (§7.2) and settlement balance timing (M10): settlements apply at marked_paid AND confirmed; pending and disputed have no effect. Sign convention: positive = owed to them. Net maps list every effective user touched by a non-deleted expense or applied settlement (zeros included). Deleted expenses are invisible.",
+  "cases": [
+    {
+      "name": "B1 basic: one payer, equal three-way",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "c",
+          "amount_total": 300,
+          "splits": { "a": 100, "b": 100, "c": 100 }
+        }
+      ],
+      "settlements": [],
+      "expect": {
+        "net": { "a": -100, "b": -100, "c": 200 },
+        "transfers": [
+          { "from": "a", "to": "c", "amount": 100 },
+          { "from": "b", "to": "c", "amount": 100 }
+        ]
+      }
+    },
+    {
+      "name": "B2 pending settlement has no balance effect (M10)",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "c",
+          "amount_total": 300,
+          "splits": { "a": 100, "b": 100, "c": 100 }
+        }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "a", "to": "c", "amount": 100, "status": "pending" }
+      ],
+      "expect": { "net": { "a": -100, "b": -100, "c": 200 } }
+    },
+    {
+      "name": "B3 marked_paid settlement applies (M10)",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "c",
+          "amount_total": 300,
+          "splits": { "a": 100, "b": 100, "c": 100 }
+        }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "a", "to": "c", "amount": 100, "status": "marked_paid" }
+      ],
+      "expect": {
+        "net": { "a": 0, "b": -100, "c": 100 },
+        "transfers": [{ "from": "b", "to": "c", "amount": 100 }]
+      }
+    },
+    {
+      "name": "B4 confirmed settlement stays applied",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "c",
+          "amount_total": 300,
+          "splits": { "a": 100, "b": 100, "c": 100 }
+        }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "a", "to": "c", "amount": 100, "status": "confirmed" }
+      ],
+      "expect": { "net": { "a": 0, "b": -100, "c": 100 } }
+    },
+    {
+      "name": "B5 disputed settlement is un-applied (M10)",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "c",
+          "amount_total": 300,
+          "splits": { "a": 100, "b": 100, "c": 100 }
+        }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "a", "to": "c", "amount": 100, "status": "disputed" }
+      ],
+      "expect": { "net": { "a": -100, "b": -100, "c": 200 } }
+    },
+    {
+      "name": "B6 soft-deleted expense is invisible",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "a",
+          "amount_total": 100,
+          "splits": { "a": 50, "b": 50 },
+          "deleted": true
+        }
+      ],
+      "settlements": [],
+      "expect": { "net": {}, "transfers": [] }
+    },
+    {
+      "name": "B7 cross-paying nets correctly",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "a",
+          "amount_total": 120,
+          "splits": { "a": 60, "b": 60 }
+        },
+        {
+          "id": "e2",
+          "paid_by": "b",
+          "amount_total": 60,
+          "splits": { "a": 30, "b": 30 }
+        }
+      ],
+      "settlements": [],
+      "expect": {
+        "net": { "a": 30, "b": -30 },
+        "transfers": [{ "from": "b", "to": "a", "amount": 30 }],
+        "pairwise": [{ "from": "b", "to": "a", "amount": 30 }]
+      }
+    },
+    {
+      "name": "B8 conservation: nets always sum to zero",
+      "kind": "scenario",
+      "users": [{ "id": "a" }, { "id": "b" }, { "id": "c" }, { "id": "d" }],
+      "expenses": [
+        {
+          "id": "e1",
+          "paid_by": "a",
+          "amount_total": 1001,
+          "splits": { "a": 251, "b": 250, "c": 250, "d": 250 }
+        },
+        {
+          "id": "e2",
+          "paid_by": "b",
+          "amount_total": 333,
+          "splits": { "b": 111, "c": 111, "d": 111 }
+        }
+      ],
+      "settlements": [
+        { "id": "s1", "from": "c", "to": "a", "amount": 200, "status": "marked_paid" }
+      ],
+      "expect": {
+        "net": { "a": 550, "b": -28, "c": -161, "d": -361 }
+      }
+    }
+  ]
+}

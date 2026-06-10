@@ -1,0 +1,243 @@
+{
+  "suite": "money-math/splits",
+  "description": "Split computation for all types. Decision M8: largest-remainder rounding, ties broken by user_id ascending. All amounts integer paise. Sum of shares MUST equal amount_total (M7). Percent arrives as integer basis points summing to 10000.",
+  "cases": [
+    {
+      "name": "equal: divides evenly",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 300,
+      "participants": [{ "user_id": "a" }, { "user_id": "b" }, { "user_id": "c" }],
+      "expect": { "shares": { "a": 100, "b": 100, "c": 100 } }
+    },
+    {
+      "name": "equal: remainder 1 goes to first user_id asc",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 100,
+      "participants": [{ "user_id": "a" }, { "user_id": "b" }, { "user_id": "c" }],
+      "expect": { "shares": { "a": 34, "b": 33, "c": 33 } }
+    },
+    {
+      "name": "equal: fewer paise than participants — zero shares are legal",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 3,
+      "participants": [
+        { "user_id": "a" },
+        { "user_id": "b" },
+        { "user_id": "c" },
+        { "user_id": "d" },
+        { "user_id": "e" }
+      ],
+      "expect": { "shares": { "a": 1, "b": 1, "c": 1, "d": 0, "e": 0 } }
+    },
+    {
+      "name": "equal: 1 paisa, 2 people",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 1,
+      "participants": [{ "user_id": "a" }, { "user_id": "b" }],
+      "expect": { "shares": { "a": 1, "b": 0 } }
+    },
+    {
+      "name": "equal: single participant takes all",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 200,
+      "participants": [{ "user_id": "a" }],
+      "expect": { "shares": { "a": 200 } }
+    },
+    {
+      "name": "equal: participant order in input is irrelevant — user_id order decides remainder",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 100,
+      "participants": [{ "user_id": "c" }, { "user_id": "a" }, { "user_id": "b" }],
+      "expect": { "shares": { "a": 34, "b": 33, "c": 33 } }
+    },
+    {
+      "name": "error: zero amount",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 0,
+      "participants": [{ "user_id": "a" }],
+      "expect": { "error": "invalid_amount" }
+    },
+    {
+      "name": "error: negative amount",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": -5,
+      "participants": [{ "user_id": "a" }],
+      "expect": { "error": "invalid_amount" }
+    },
+    {
+      "name": "error: amount above bound (D2: max 10^12 paise)",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 1000000000001,
+      "participants": [{ "user_id": "a" }],
+      "expect": { "error": "amount_out_of_bounds" }
+    },
+    {
+      "name": "error: no participants",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 100,
+      "participants": [],
+      "expect": { "error": "no_participants" }
+    },
+    {
+      "name": "error: duplicate participant",
+      "kind": "split",
+      "split_type": "equal",
+      "amount_total": 100,
+      "participants": [{ "user_id": "a" }, { "user_id": "a" }],
+      "expect": { "error": "duplicate_participant" }
+    },
+    {
+      "name": "exact: shares echo back when they sum",
+      "kind": "split",
+      "split_type": "exact",
+      "amount_total": 250,
+      "participants": [
+        { "user_id": "a", "amount": 100 },
+        { "user_id": "b", "amount": 150 }
+      ],
+      "expect": { "shares": { "a": 100, "b": 150 } }
+    },
+    {
+      "name": "exact: zero share is legal",
+      "kind": "split",
+      "split_type": "exact",
+      "amount_total": 250,
+      "participants": [
+        { "user_id": "a", "amount": 0 },
+        { "user_id": "b", "amount": 250 }
+      ],
+      "expect": { "shares": { "a": 0, "b": 250 } }
+    },
+    {
+      "name": "error: exact shares must sum to total — no auto-fix (M8)",
+      "kind": "split",
+      "split_type": "exact",
+      "amount_total": 250,
+      "participants": [
+        { "user_id": "a", "amount": 100 },
+        { "user_id": "b", "amount": 100 }
+      ],
+      "expect": { "error": "split_sum_mismatch" }
+    },
+    {
+      "name": "error: exact negative share",
+      "kind": "split",
+      "split_type": "exact",
+      "amount_total": 250,
+      "participants": [
+        { "user_id": "a", "amount": -50 },
+        { "user_id": "b", "amount": 300 }
+      ],
+      "expect": { "error": "negative_share" }
+    },
+    {
+      "name": "percent: largest remainder wins the extra paisa",
+      "kind": "split",
+      "split_type": "percent",
+      "amount_total": 100,
+      "participants": [
+        { "user_id": "a", "bp": 3333 },
+        { "user_id": "b", "bp": 3333 },
+        { "user_id": "c", "bp": 3334 }
+      ],
+      "expect": { "shares": { "a": 33, "b": 33, "c": 34 } }
+    },
+    {
+      "name": "percent: remainder tie broken by user_id asc",
+      "kind": "split",
+      "split_type": "percent",
+      "amount_total": 101,
+      "participants": [
+        { "user_id": "a", "bp": 5000 },
+        { "user_id": "b", "bp": 5000 }
+      ],
+      "expect": { "shares": { "a": 51, "b": 50 } }
+    },
+    {
+      "name": "percent: 100% single participant",
+      "kind": "split",
+      "split_type": "percent",
+      "amount_total": 1000,
+      "participants": [{ "user_id": "a", "bp": 10000 }],
+      "expect": { "shares": { "a": 1000 } }
+    },
+    {
+      "name": "error: basis points must sum to 10000",
+      "kind": "split",
+      "split_type": "percent",
+      "amount_total": 100,
+      "participants": [
+        { "user_id": "a", "bp": 5000 },
+        { "user_id": "b", "bp": 4999 }
+      ],
+      "expect": { "error": "percent_sum_mismatch" }
+    },
+    {
+      "name": "error: negative basis points",
+      "kind": "split",
+      "split_type": "percent",
+      "amount_total": 100,
+      "participants": [
+        { "user_id": "a", "bp": -100 },
+        { "user_id": "b", "bp": 10100 }
+      ],
+      "expect": { "error": "invalid_percent" }
+    },
+    {
+      "name": "shares: 2:1:1 of 100",
+      "kind": "split",
+      "split_type": "shares",
+      "amount_total": 100,
+      "participants": [
+        { "user_id": "a", "weight": 2 },
+        { "user_id": "b", "weight": 1 },
+        { "user_id": "c", "weight": 1 }
+      ],
+      "expect": { "shares": { "a": 50, "b": 25, "c": 25 } }
+    },
+    {
+      "name": "shares: equal weights behave like equal split (tie to user_id asc)",
+      "kind": "split",
+      "split_type": "shares",
+      "amount_total": 100,
+      "participants": [
+        { "user_id": "a", "weight": 1 },
+        { "user_id": "b", "weight": 1 },
+        { "user_id": "c", "weight": 1 }
+      ],
+      "expect": { "shares": { "a": 34, "b": 33, "c": 33 } }
+    },
+    {
+      "name": "shares: 3:2 of 7 — larger fractional remainder gets the paisa",
+      "kind": "split",
+      "split_type": "shares",
+      "amount_total": 7,
+      "participants": [
+        { "user_id": "a", "weight": 3 },
+        { "user_id": "b", "weight": 2 }
+      ],
+      "expect": { "shares": { "a": 4, "b": 3 } }
+    },
+    {
+      "name": "error: zero weight",
+      "kind": "split",
+      "split_type": "shares",
+      "amount_total": 100,
+      "participants": [
+        { "user_id": "a", "weight": 0 },
+        { "user_id": "b", "weight": 1 }
+      ],
+      "expect": { "error": "invalid_weight" }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# Node / pnpm
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Wrangler / Cloudflare (Sprint 5+)
+.wrangler/
+.dev.vars
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
