@@ -55,6 +55,7 @@ class Expenses extends Table {
   TextColumn get id => text()();
   TextColumn get groupId => text().references(Groups, #id)();
   TextColumn get description => text()();
+  // ignore: recursive_getters — drift's documented self-referencing CHECK pattern
   IntColumn get amountTotal => integer().check(amountTotal.isBiggerThanValue(0))();
   TextColumn get currency => text().withDefault(const Constant('INR'))();
   TextColumn get paidBy => text().references(Users, #id)();
@@ -72,8 +73,8 @@ class Expenses extends Table {
 class ExpenseSplits extends Table {
   TextColumn get expenseId => text().references(Expenses, #id)();
   TextColumn get userId => text().references(Users, #id)();
-  IntColumn get shareAmount =>
-      integer().check(shareAmount.isBiggerOrEqualValue(0))();
+  // ignore: recursive_getters — drift's documented self-referencing CHECK pattern
+  IntColumn get shareAmount => integer().check(shareAmount.isBiggerOrEqualValue(0))();
 
   @override
   Set<Column> get primaryKey => {expenseId, userId};
@@ -84,6 +85,7 @@ class Settlements extends Table {
   TextColumn get groupId => text().references(Groups, #id)();
   TextColumn get fromUser => text().references(Users, #id)();
   TextColumn get toUser => text().references(Users, #id)();
+  // ignore: recursive_getters — drift's documented self-referencing CHECK pattern
   IntColumn get amount => integer().check(amount.isBiggerThanValue(0))();
   TextColumn get currency => text().withDefault(const Constant('INR'))();
   TextColumn get method => text().withDefault(const Constant('upi'))();
